@@ -35,42 +35,42 @@ TOPIC = "v1/devices/me/telemetry"
 RPC_TOPIC = "v1/devices/me/rpc/request/+"
 
 def gate(status):
-    if (status == 0) :
-       servo1.ChangeDutyCycle(2+(0/18))
-       time.sleep(0.4)
-       servo1.ChangeDutyCycle(0)
-    else :
-        servo1.ChangeDutyCycle(2+(180/18))
+    if status == 0:
+        servo1.ChangeDutyCycle(2 + (0 / 18))
+        time.sleep(0.4)
+        servo1.ChangeDutyCycle(0)
+    else:
+        servo1.ChangeDutyCycle(2 + (180 / 18))
         time.sleep(0.5)
         servo1.ChangeDutyCycle(0)
 
 def on_connect(client, userdata, flags, rc):
-	if rc == 0:
-    	print("Connected to ThingsBoard MQTT broker")
-    	client.subscribe(RPC_TOPIC)  # Subscribe to receive instructions
-	else:
-    	print(f"Failed to connect, return code {rc}")
+    if rc == 0:
+        print("Connected to ThingsBoard MQTT broker")
+        client.subscribe(RPC_TOPIC)  # Subscribe to receive instructions
+    else:
+        print(f"Failed to connect, return code {rc}")
 
 def on_message(client, userdata, msg):
-	try:
-    	payload = json.loads(msg.payload.decode())
-    	method = payload.get("method", "")
-    	params = payload.get("params", {})
+    try:
+        payload = json.loads(msg.payload.decode())
+        method = payload.get("method", "")
+        params = payload.get("params", {})
 
-    	if method == "open_door" and params.get("state") == "unlock":
-        	print("Door Unlock Command Received! Triggering unlock mechanism...")
+        if method == "open_door" and params.get("state") == "unlock":
+            print("Door Unlock Command Received! Triggering unlock mechanism...")
             data = {"status": "granted", "image_url": image_url}
             send_to_thingsboard(data)
-        	gate(1)
+            gate(1)
             time.sleep(5)
             gate(0)
-    	elif method == "open_door" and params.get("state") == "lock":
-        	print("Door Lock Command Received! Triggering lock mechanism...")
-        	gate(0)
-    	else:
-        	print(f"Unknown command received: {payload}")
-	except json.JSONDecodeError:
-    	print("Failed to decode the received message.")
+        elif method == "open_door" and params.get("state") == "lock":
+            print("Door Lock Command Received! Triggering lock mechanism...")
+            gate(0)
+        else:
+            print(f"Unknown command received: {payload}")
+    except json.JSONDecodeError:
+        print("Failed to decode the received message.")
 
 # Initialize MQTT client
 client = mqtt.Client()
@@ -116,7 +116,6 @@ def upload_to_imagekit(file_name):
             )
         ).response_metadata.raw
 
-    # Get the URL of the uploaded image
     if upload_response and 'url' in upload_response:
         image_url = upload_response['url']
         print(f"Image uploaded successfully: {image_url}")
@@ -150,24 +149,20 @@ while True:
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(50, 50))
     
-    # Display video feed
     cv2.imshow("Smart Door Camera", frame)
 
-    # Stop execution if 'q' is pressed
     if cv2.waitKey(25) & 0xFF == ord('q'):
         break
 
     if len(faces) > 0:
-        # Face detected, process it
         filename = "captured_face.jpg"
         cv2.imwrite(filename, frame)
         print("Face detected! Capturing and processing...")
 
-        # Perform face recognition
         unknown_image = face_recognition.load_image_file(filename)
         unknown_encodings = face_recognition.face_encodings(unknown_image)
 
-        if len(unknown_encodings) > 0:
+        if unknown_encodings:
             unknown_encoding = unknown_encodings[0]
             matches = face_recognition.compare_faces(known_face_encodings, unknown_encoding)
             face_distances = face_recognition.face_distance(known_face_encodings, unknown_encoding)
@@ -176,32 +171,21 @@ while True:
                 match_index = np.argmin(face_distances)
                 recognized_name = known_face_names[match_index]
                 print(f"Access Granted: {recognized_name}")
-
-                # Open gate
                 gate(1)
-                time.sleep(5)  # Keep gate open for 5 seconds
+                time.sleep(5)
                 gate(0)
-
-                # Send log to ThingsBoard
                 data = {"status": "granted", "person_name": recognized_name}
                 send_to_thingsboard(data)
-
             else:
                 print("Unknown Face Detected. Uploading image...")
                 image_url = upload_to_imagekit(filename)
-
                 if image_url:
-                    data = {"status": "unknown", "image_url": image_url}
-                    send_to_thingsboard(data)
+                    send_to_thingsboard({"status": "unknown", "image_url": image_url})
                     time.sleep(10)
                     cap.release()
                     cv2.destroyAllWindows()
                     break
-                else:
-                    print("Failed to upload image to ImageKit.")
 
-
-# Clean up
 cap.release()
 cv2.destroyAllWindows()
 servo1.stop()
