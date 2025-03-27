@@ -129,24 +129,78 @@ print("Loading known faces...")
 known_face_encodings, known_face_names = load_known_faces()
 print("Face encoding complete.")
 
-#
 print("Smart Door is active. Waiting for visitors...")
 
 while True:
     # Start video capture
     cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Error: Camera not found or failed to open.")
+    else:
+        print("Camera initialized successfully.")
+
+    run=5
+    i=0
+    while True:
+        ret, frame = cap.read()
+
+        # Check if frame is successfully captured
+        
+        if not ret or frame is None:
+            print("Failed to capture frame. Retrying...")
+            i=i+1
+            if i > run:
+                break
+            continue
+
+        print("Frame captured successfully!")
+
+        # Your processing code here (e.g., face detection, etc.)
+        
+        # Display the frame
+        cv2.imshow("Camera Feed", frame)
+
+        # Break the loop if 'q' is pressed
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
     time.sleep(2)  # Allow camera to adjust
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
+    # Capture frames
     ret, frame = cap.read()
-    # cv2.imshow("Smart Door Camera", frame)
-    if not ret:
-        print("No Face Detected")
+
+    # Check if the frame is captured correctly
+    if not ret or frame is None:
+        print("No Face Detected or failed to capture frame")
         continue
-    
+
+    # Convert the frame to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    # Apply histogram equalization to improve face detection
+    gray = cv2.equalizeHist(gray)
+
+    # Detect faces in the frame
     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(50, 50))
-    
+
+    # Draw rectangle around each detected face (for debugging)
+    for (x, y, w, h) in faces:
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+
+    # Show the video feed with detected faces (for debugging)
+    cv2.imshow("Smart Door Camera", frame)
+
+    # Check if faces are detected
+    if len(faces) > 0:
+        print("Face Detected!")
+        # Process the face recognition here
+    else:
+        print("No faces detected")
+
+
     # Display video feed
     cv2.imshow("Smart Door Camera", frame)
 
@@ -169,7 +223,7 @@ while True:
             matches = face_recognition.compare_faces(known_face_encodings, unknown_encoding)
             face_distances = face_recognition.face_distance(known_face_encodings, unknown_encoding)
 
-            if True in matches:
+            if matches[0]:  # Check the first match
                 match_index = np.argmin(face_distances)
                 recognized_name = known_face_names[match_index]
                 print(f"Access Granted: {recognized_name}")
@@ -191,9 +245,6 @@ while True:
                     data = {"status": "unknown", "image_url": image_url}
                     send_to_thingsboard(data)
                     time.sleep(10)
-                    cap.release()
-                    cv2.destroyAllWindows()
-                    break
                 else:
                     print("Failed to upload image to ImageKit.")
 
